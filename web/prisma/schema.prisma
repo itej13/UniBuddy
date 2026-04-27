@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id             String             @id @default(cuid())
+  name           String?
+  email          String?            @unique
+  emailVerified  DateTime?
+  image          String?
+  lastSyncAt     DateTime?
+  lastSyncStatus String?
+  lastSyncError  String?
+  accounts       Account[]
+  sessions       Session[]
+  subjects       Subject[]
+  timetableSlots TimetableSlot[]
+  attendance     AttendanceRecord[]
+  courses        ClassroomCourse[]
+  assignments    Assignment[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Subject {
+  id                  String             @id @default(cuid())
+  userId              String
+  name                String
+  code                String             @default("")
+  credits             Int                @default(3)
+  classroomCourseId   String?
+  classroomCourseName String?
+  colorHex            String             @default("#2563EB")
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slots               TimetableSlot[]
+  attendance          AttendanceRecord[]
+  assignments         Assignment[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model TimetableSlot {
+  id           String   @id @default(cuid())
+  userId       String
+  subjectId    String
+  weekday      Int
+  startMinutes Int
+  endMinutes   Int
+  room         String   @default("")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject      Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AttendanceRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  subjectId String
+  date      DateTime
+  status    String
+  note      String   @default("")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, subjectId, date])
+}
+
+model ClassroomCourse {
+  id           String   @id @default(cuid())
+  userId       String
+  classroomId  String
+  name         String
+  section      String?
+  lastSyncedAt DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, classroomId])
+}
+
+model Assignment {
+  id              String    @id @default(cuid())
+  userId          String
+  classroomKey    String
+  courseId        String
+  courseName      String
+  courseWorkId    String
+  subjectId       String?
+  title           String
+  details         String    @default("")
+  dueDate         DateTime?
+  alternateLink   String?
+  submissionState String    @default("unknown")
+  maxPoints       Float?
+  lastSyncedAt    DateTime  @default(now())
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject         Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, classroomKey])
+}

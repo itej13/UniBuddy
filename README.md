@@ -1,99 +1,65 @@
 # UniBuddy
 
-UniBuddy is a native macOS app for tracking college attendance and Google Classroom submissions in one place. It is built with SwiftUI and Swift Package Manager, stores data locally on your Mac, and uses Google Sign-In to read your own Classroom courses, coursework, and submission status.
+UniBuddy tracks college attendance and Google Classroom submissions in one place — a full-stack web app built with Next.js, deployed on Vercel, backed by Supabase (PostgreSQL).
 
 ## Features
 
-- Google Sign-In for college accounts.
-- Google Classroom sync for courses, coursework, due dates, and submission state.
-- Subject setup with subject name, code, credits, and optional Classroom course linking.
-- Timetable builder with multi-day class slots and a tabular weekly view.
-- Attendance logging per subject and date.
-- Dashboard summaries for today’s classes, pending submissions, and attendance percentages.
-- Local notifications for upcoming submissions and attendance prompts.
-- Local-only app data stored under macOS Application Support.
+- Google Sign-In for college accounts
+- Google Classroom sync for courses, coursework, due dates, and submission state
+- Subject setup with name, code, credits, and optional Classroom course linking
+- Timetable builder with weekly class slots
+- Attendance logging per subject and date
+- Dashboard summaries for today's classes, pending submissions, and attendance percentages
+
+## Stack
+
+- **Framework:** Next.js 16 (App Router, React Server Components)
+- **Auth:** NextAuth v5 with Google OAuth (database sessions)
+- **Database:** Supabase (PostgreSQL) via Prisma ORM
+- **Deployment:** Vercel
+- **Styling:** Tailwind CSS v4
 
 ## Requirements
 
-- macOS 14 or later.
-- Swift 6 toolchain / Xcode Command Line Tools.
-- A Google Cloud OAuth client configured for native sign-in.
-- Google Classroom API enabled in the Google Cloud project.
+- Node.js 18+
+- A Google Cloud project with:
+  - Google Classroom API enabled
+  - OAuth 2.0 Web Application credentials
 
-## Setup
-
-Clone the repository and create a local OAuth config:
+## Local Development
 
 ```bash
+cd web
 cp .env.example .env.local
+# Fill in AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET, AUTH_SECRET, AUTH_URL, DATABASE_URL, DIRECT_URL
+npm install
+npm run dev
 ```
 
-Update `.env.local`:
+Open `http://localhost:3000`.
 
-```bash
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.your-client-id
-GOOGLE_HOSTED_DOMAIN=
-```
+## Environment Variables
 
-`GOOGLE_HOSTED_DOMAIN` is optional. You can leave it blank, or set it to your college Google Workspace domain if you want Google’s account chooser to prefer that domain.
+| Variable | Description |
+|---|---|
+| `AUTH_GOOGLE_ID` | Google OAuth Web client ID |
+| `AUTH_GOOGLE_SECRET` | Google OAuth Web client secret |
+| `AUTH_SECRET` | Random secret for session encryption (`openssl rand -base64 32`) |
+| `AUTH_URL` | Base URL (`http://localhost:3000` locally, Vercel URL in production) |
+| `DATABASE_URL` | Supabase pooler URL (port 6543, `?pgbouncer=true&connection_limit=1`) |
+| `DIRECT_URL` | Supabase direct URL (port 5432, used for migrations only) |
 
-## Google Cloud Configuration
+## Google Cloud Setup
 
-1. Open Google Cloud Console.
-2. Enable the **Google Classroom API** for the project.
-3. Create an OAuth client:
-   - Application type: `iOS`
-   - Bundle ID: `com.tejasdas.UniBuddy`
-4. Copy the client ID and reversed client ID into `.env.local`.
+1. Enable the **Google Classroom API**
+2. Create an OAuth 2.0 credential — type: **Web application**
+3. Add authorized redirect URI: `https://your-app.vercel.app/api/auth/callback/google`
+4. Add authorized JavaScript origin: `https://your-app.vercel.app`
 
-Do not put a client secret in this app. Native desktop/mobile OAuth clients use the client ID and redirect URL scheme; embedding a client secret in an app bundle would expose it.
+## Privacy & Security
 
-## Run
-
-```bash
-./script/build_and_run.sh
-```
-
-The script:
-
-- resolves Swift Package Manager dependencies,
-- applies a local macOS keychain compatibility patch for Google Sign-In,
-- builds the SwiftPM executable,
-- stages `dist/UniBuddy.app`, and
-- launches the app as a foreground macOS bundle.
-
-Useful run modes:
-
-```bash
-./script/build_and_run.sh --verify
-./script/build_and_run.sh --logs
-./script/build_and_run.sh --telemetry
-```
-
-## Project Structure
-
-```text
-Sources/
-  App/          App entry point and macOS app delegate
-  Models/       Codable app and Classroom models
-  Services/     Google auth, Classroom API, notifications
-  Stores/       Local JSON persistence and sync coordination
-  Support/      Formatting and analytics helpers
-  Views/        SwiftUI dashboard, subjects, timetable, attendance, settings
-script/         Build and run entrypoint
-```
-
-## Privacy
-
-UniBuddy has no backend. Subjects, timetable slots, attendance records, synced Classroom metadata, and profile details are stored locally on your Mac. Google access is limited to read-only Classroom scopes for your own courses, coursework, and submissions.
-
-## Troubleshooting
-
-If sync reports that the Classroom API is disabled, enable it here for your project:
-
-```text
-https://console.developers.google.com/apis/api/classroom.googleapis.com/overview
-```
-
-After enabling the API, wait a few minutes and press **Sync** again.
+- Sessions are database-backed — no tokens embedded in cookies
+- Google access tokens stored server-side only, never sent to the browser
+- All data queries are scoped by `userId` — students can only access their own data
+- HTTP security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options
+- Google Classroom scopes are read-only
