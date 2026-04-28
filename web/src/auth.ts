@@ -29,6 +29,7 @@ async function googleFetch(...args: Parameters<typeof fetch>) {
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "database" },
+  trustHost: true,
   providers: [
     Google({
       authorization: {
