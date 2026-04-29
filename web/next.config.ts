@@ -15,6 +15,7 @@ const cspHeader = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: process.cwd(),
   async headers() {
     return [
       {
