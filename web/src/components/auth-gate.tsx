@@ -13,6 +13,7 @@ import {
   Sparkles,
   Table2,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { signInWithGoogle } from "@/lib/actions";
 
 const highlights = [
@@ -50,6 +51,13 @@ const stats = [
   { label: "Today", value: "3", detail: "classes" },
   { label: "Pending", value: "5", detail: "submissions" },
   { label: "Attendance", value: "86%", detail: "average" },
+];
+
+const previewNavItems: Array<{ icon: LucideIcon; label: string; active: boolean }> = [
+  { icon: LayoutDashboard, label: "Dashboard", active: true },
+  { icon: GraduationCap, label: "Subjects", active: false },
+  { icon: Table2, label: "Timetable", active: false },
+  { icon: Inbox, label: "Submissions", active: false },
 ];
 
 export function AuthGate() {
@@ -235,20 +243,15 @@ function DashboardPreview() {
               </div>
             </div>
             <div className="mt-7 space-y-2">
-              {[
-                [LayoutDashboard, "Dashboard", true],
-                [GraduationCap, "Subjects", false],
-                [Table2, "Timetable", false],
-                [Inbox, "Submissions", false],
-              ].map(([Icon, label, active]) => (
+              {previewNavItems.map(({ icon: Icon, label, active }) => (
                 <div
-                  key={label as string}
+                  key={label}
                   className={`flex h-9 items-center gap-2 rounded-md px-3 text-xs font-medium ${
                     active ? "bg-white text-stone-950" : "text-stone-300"
                   }`}
                 >
                   <Icon size={15} />
-                  {label as string}
+                  {label}
                 </div>
               ))}
             </div>
