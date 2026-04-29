@@ -4,9 +4,8 @@
   "private": true,
   "scripts": {
     "postinstall": "prisma generate",
-    "prebuild": "node scripts/vercel-routes-manifest-watcher.mjs",
     "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "build": "node scripts/vercel-routes-manifest-watcher.mjs --watch & next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "prisma generate",
