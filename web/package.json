@@ -6,7 +6,6 @@
     "postinstall": "prisma generate",
     "dev": "next dev --webpack",
     "build": "next build --webpack",
-    "postbuild": "node scripts/ensure-vercel-routes-manifest.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "prisma generate",

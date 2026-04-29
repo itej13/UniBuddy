@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import { copyFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 const cspHeader = [
   "default-src 'self'",
@@ -13,6 +15,32 @@ const cspHeader = [
   "connect-src 'self' https://classroom.googleapis.com https://oauth2.googleapis.com",
   "upgrade-insecure-requests",
 ].join("; ");
+
+function mirrorRoutesManifestForVercel() {
+  if (process.env.VERCEL !== "1") {
+    return;
+  }
+
+  const routesManifest = join(process.cwd(), ".next", "routes-manifest.json");
+  const deterministicRoutesManifest = join(
+    process.cwd(),
+    ".next",
+    "routes-manifest-deterministic.json",
+  );
+
+  const copyManifest = () => {
+    if (existsSync(routesManifest) && !existsSync(deterministicRoutesManifest)) {
+      copyFileSync(routesManifest, deterministicRoutesManifest);
+    }
+  };
+
+  copyManifest();
+
+  const interval = setInterval(copyManifest, 100);
+  interval.unref();
+}
+
+mirrorRoutesManifestForVercel();
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: process.cwd(),
