@@ -55,20 +55,23 @@ export function attendanceSummary(subject: Subject, records: AttendanceRecord[])
   };
 }
 
-export function attendancePercentage(subject: Subject, records: AttendanceRecord[]) {
-  const counted = records.filter(
-    (record) =>
-      record.subjectId === subject.id &&
-      (record.status === "present" || record.status === "absent"),
-  );
-  if (counted.length === 0) return 0;
-  return counted.filter((record) => record.status === "present").length / counted.length;
+export type AttendanceTotal = {
+  subjectId: string;
+  present: number;
+  absent: number;
+};
+
+export function attendancePercentage(total?: AttendanceTotal) {
+  if (!total) return 0;
+  const counted = total.present + total.absent;
+  return counted === 0 ? 0 : total.present / counted;
 }
 
-export function averageAttendance(subjects: Subject[], records: AttendanceRecord[]) {
+export function averageAttendance(subjects: Subject[], totals: AttendanceTotal[]) {
   if (subjects.length === 0) return 0;
+  const totalsBySubject = new Map(totals.map((total) => [total.subjectId, total]));
   return (
-    subjects.reduce((total, subject) => total + attendancePercentage(subject, records), 0) /
+    subjects.reduce((total, subject) => total + attendancePercentage(totalsBySubject.get(subject.id)), 0) /
     subjects.length
   );
 }

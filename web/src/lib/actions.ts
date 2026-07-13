@@ -1,8 +1,17 @@
 "use server";
 
+import type { Account } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { signIn, signOut } from "@/auth";
-import { listCourses, listCourseWork, listSubmissions, resolvedDueDate, submissionState } from "@/lib/classroom";
+import {
+  ClassroomRequestError,
+  listCourses,
+  listCourseWork,
+  listSubmissions,
+  refreshGoogleAccessToken,
+  resolvedDueDate,
+  submissionState,
+} from "@/lib/classroom";
 import { attendanceStatuses, dateOnly, timeToMinutes } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/data";
@@ -89,6 +98,9 @@ export async function createTimetableSlot(formData: FormData) {
 
   if (!subjectId || days.length === 0 || endMinutes <= startMinutes) return;
 
+  const subject = await prisma.subject.findUnique({ where: { id: subjectId, userId } });
+  if (!subject) return;
+
   for (const weekday of days) {
     const duplicate = await prisma.timetableSlot.findFirst({
       where: { userId, subjectId, weekday, startMinutes, endMinutes },
@@ -117,12 +129,104 @@ export async function markAttendance(formData: FormData) {
 
   if (!subjectId || !attendanceStatuses.includes(status as never)) return;
 
+  const subject = await prisma.subject.findUnique({ where: { id: subjectId, userId } });
+  if (!subject) return;
+
   await prisma.attendanceRecord.upsert({
     where: { userId_subjectId_date: { userId, subjectId, date } },
     update: { status },
     create: { userId, subjectId, date, status },
   });
   revalidateApp();
+}
+
+async function refreshAccountAccessToken(account: Account) {
+  if (!account.refresh_token) {
+    throw new Error("Google Classroom needs to be reconnected. Sign out and sign in again.");
+  }
+
+  const refreshed = await refreshGoogleAccessToken(account.refresh_token);
+  await prisma.account.update({
+    where: { id: account.id },
+    data: {
+      access_token: refreshed.accessToken,
+      expires_at: refreshed.expiresAt,
+      ...(refreshed.refreshToken ? { refresh_token: refreshed.refreshToken } : {}),
+      ...(refreshed.scope ? { scope: refreshed.scope } : {}),
+      ...(refreshed.tokenType ? { token_type: refreshed.tokenType } : {}),
+    },
+  });
+  return refreshed.accessToken;
+}
+
+async function currentClassroomAccessToken(account: Account) {
+  const expiresSoon = account.expires_at !== null && account.expires_at <= Math.floor(Date.now() / 1000) + 60;
+  if (!account.access_token || expiresSoon) {
+    return refreshAccountAccessToken(account);
+  }
+  return account.access_token;
+}
+
+async function syncClassroomData(userId: string, accessToken: string) {
+  const courses = await listCourses(accessToken);
+  const subjects = await prisma.subject.findMany({ where: { userId } });
+  let syncedAssignments = 0;
+
+  for (const course of courses) {
+    await prisma.classroomCourse.upsert({
+      where: { userId_classroomId: { userId, classroomId: course.id } },
+      update: { name: course.name, section: course.section, lastSyncedAt: new Date() },
+      create: {
+        userId,
+        classroomId: course.id,
+        name: course.name,
+        section: course.section,
+      },
+    });
+
+    const [workItems, submissions] = await Promise.all([
+      listCourseWork(accessToken, course.id),
+      listSubmissions(accessToken, course.id),
+    ]);
+    const submissionsByWorkId = new Map(submissions.map((submission) => [submission.courseWorkId, submission]));
+    const linkedSubject = subjects.find((subject) => subject.classroomCourseId === course.id);
+
+    for (const work of workItems) {
+      const submission = submissionsByWorkId.get(work.id);
+      const classroomKey = `${course.id}:${work.id}`;
+      await prisma.assignment.upsert({
+        where: { userId_classroomKey: { userId, classroomKey } },
+        update: {
+          courseName: course.name,
+          subjectId: linkedSubject?.id,
+          title: work.title,
+          details: work.description ?? "",
+          dueDate: resolvedDueDate(work),
+          alternateLink: work.alternateLink ?? submission?.alternateLink,
+          submissionState: submissionState(submission?.state),
+          maxPoints: work.maxPoints,
+          lastSyncedAt: new Date(),
+        },
+        create: {
+          userId,
+          classroomKey,
+          courseId: course.id,
+          courseName: course.name,
+          courseWorkId: work.id,
+          subjectId: linkedSubject?.id,
+          title: work.title,
+          details: work.description ?? "",
+          dueDate: resolvedDueDate(work),
+          alternateLink: work.alternateLink ?? submission?.alternateLink,
+          submissionState: submissionState(submission?.state),
+          maxPoints: work.maxPoints,
+        },
+      });
+      syncedAssignments += 1;
+    }
+  }
+
+  return { courseCount: courses.length, assignmentCount: syncedAssignments };
 }
 
 export async function syncClassroom() {
@@ -132,87 +236,47 @@ export async function syncClassroom() {
     orderBy: { id: "desc" },
   });
 
-  if (!account?.access_token) {
+  if (!account) {
     await prisma.user.update({
       where: { id: userId },
-      data: { lastSyncError: "Google did not provide an access token. Sign out and sign in again.", lastSyncStatus: null },
+      data: { lastSyncError: "No Google account is connected. Sign out and sign in again.", lastSyncStatus: null },
     });
     revalidateApp();
     return;
   }
 
   try {
-    const courses = await listCourses(account.access_token);
-    const subjects = await prisma.subject.findMany({ where: { userId } });
-    let syncedAssignments = 0;
-
-    for (const course of courses) {
-      await prisma.classroomCourse.upsert({
-        where: { userId_classroomId: { userId, classroomId: course.id } },
-        update: { name: course.name, section: course.section, lastSyncedAt: new Date() },
-        create: {
-          userId,
-          classroomId: course.id,
-          name: course.name,
-          section: course.section,
-        },
-      });
-
-      const [workItems, submissions] = await Promise.all([
-        listCourseWork(account.access_token, course.id),
-        listSubmissions(account.access_token, course.id),
-      ]);
-      const submissionsByWorkId = new Map(submissions.map((submission) => [submission.courseWorkId, submission]));
-      const linkedSubject = subjects.find((subject) => subject.classroomCourseId === course.id);
-
-      for (const work of workItems) {
-        const submission = submissionsByWorkId.get(work.id);
-        const classroomKey = `${course.id}:${work.id}`;
-        await prisma.assignment.upsert({
-          where: { userId_classroomKey: { userId, classroomKey } },
-          update: {
-            courseName: course.name,
-            subjectId: linkedSubject?.id,
-            title: work.title,
-            details: work.description ?? "",
-            dueDate: resolvedDueDate(work),
-            alternateLink: work.alternateLink ?? submission?.alternateLink,
-            submissionState: submissionState(submission?.state),
-            maxPoints: work.maxPoints,
-            lastSyncedAt: new Date(),
-          },
-          create: {
-            userId,
-            classroomKey,
-            courseId: course.id,
-            courseName: course.name,
-            courseWorkId: work.id,
-            subjectId: linkedSubject?.id,
-            title: work.title,
-            details: work.description ?? "",
-            dueDate: resolvedDueDate(work),
-            alternateLink: work.alternateLink ?? submission?.alternateLink,
-            submissionState: submissionState(submission?.state),
-            maxPoints: work.maxPoints,
-          },
-        });
-        syncedAssignments += 1;
-      }
+    let accessToken = await currentClassroomAccessToken(account);
+    let synced;
+    try {
+      synced = await syncClassroomData(userId, accessToken);
+    } catch (error) {
+      if (!(error instanceof ClassroomRequestError) || error.status !== 401) throw error;
+      accessToken = await refreshAccountAccessToken(account);
+      synced = await syncClassroomData(userId, accessToken);
     }
 
     await prisma.user.update({
       where: { id: userId },
       data: {
         lastSyncAt: new Date(),
-        lastSyncStatus: `Synced ${courses.length} Classroom courses and ${syncedAssignments} assignments.`,
+        lastSyncStatus: `Synced ${synced.courseCount} Classroom courses and ${synced.assignmentCount} assignments.`,
         lastSyncError: null,
       },
     });
   } catch (error) {
+    const lastSyncError =
+      error instanceof ClassroomRequestError && error.status === 401
+        ? "Google Classroom rejected the saved connection. Sign out and sign in again."
+        : error instanceof Error && error.message.startsWith("Google could not refresh the Classroom connection")
+          ? `${error.message} Sign out and sign in again.`
+        : error instanceof Error
+          ? error.message
+          : "Classroom sync failed.";
     await prisma.user.update({
       where: { id: userId },
       data: {
-        lastSyncError: error instanceof Error ? error.message : "Classroom sync failed.",
+        lastSyncError,
         lastSyncStatus: null,
       },
     });

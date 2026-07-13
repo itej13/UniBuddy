@@ -28,7 +28,7 @@ import { getAppData } from "@/lib/data";
 type AppData = NonNullable<Awaited<ReturnType<typeof getAppData>>>;
 
 export async function AppView({ active }: { active: "dashboard" | "subjects" | "timetable" | "submissions" | "attendance" | "settings" }) {
-  const data = await getAppData();
+  const data = await getAppData(active);
   if (!data?.user) return <AuthGate />;
 
   return (
@@ -47,7 +47,7 @@ function Dashboard({ data }: { data: AppData }) {
   const todaySlots = data.timetableSlots.filter((slot) => slot.weekday === classroomWeekday());
   const pending = data.assignments.filter((assignment) => !isComplete(assignment));
   const upcoming = pending.slice(0, 6);
-  const attendanceAverage = averageAttendance(data.subjects, data.attendanceRecords);
+  const attendanceAverage = averageAttendance(data.subjects, data.attendanceTotals);
 
   return (
     <div className="grid gap-5">
@@ -261,11 +261,17 @@ function TimetableForm({ data }: { data: AppData }) {
 
 function TimetableGrid({ data, compact = false }: { data: AppData; compact?: boolean }) {
   if (data.timetableSlots.length === 0) return <EmptyState>Add timetable slots to see them here.</EmptyState>;
+  const slotsByWeekday = new Map<number, AppData["timetableSlots"]>();
+  for (const slot of data.timetableSlots) {
+    const slots = slotsByWeekday.get(slot.weekday) ?? [];
+    slots.push(slot);
+    slotsByWeekday.set(slot.weekday, slots);
+  }
 
   return (
     <div className={`grid gap-3 ${compact ? "" : "md:grid-cols-2 xl:grid-cols-3"}`}>
       {weekdays.map((day) => {
-        const slots = data.timetableSlots.filter((slot) => slot.weekday === day.raw);
+        const slots = slotsByWeekday.get(day.raw) ?? [];
         return (
           <div key={day.raw} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
             <h3 className="mb-3 text-sm font-semibold text-stone-950">{day.full}</h3>
@@ -311,6 +317,7 @@ function SlotRow({ slot, deletable = false }: { slot: AppData["timetableSlots"][
 function Attendance({ data }: { data: AppData }) {
   const today = new Date().toISOString().slice(0, 10);
   const todaySlots = data.timetableSlots.filter((slot) => slot.weekday === classroomWeekday());
+  const subjectsById = new Map(data.subjects.map((subject) => [subject.id, subject]));
 
   return (
     <div className="grid gap-5">
@@ -354,7 +361,7 @@ function Attendance({ data }: { data: AppData }) {
       <Panel title="History" eyebrow="Recent 30">
         <div className="space-y-2">
           {data.attendanceRecords.slice(0, 30).map((record) => {
-            const subject = data.subjects.find((item) => item.id === record.subjectId);
+            const subject = subjectsById.get(record.subjectId);
             return (
               <div key={record.id} className="flex items-center justify-between rounded-md border border-stone-200 bg-white px-3 py-2 text-sm">
                 <span className="font-medium">{subject?.name ?? "Unknown"}</span>
@@ -371,10 +378,11 @@ function Attendance({ data }: { data: AppData }) {
 
 function SubjectAnalytics({ data }: { data: AppData }) {
   if (data.subjects.length === 0) return <EmptyState>Add subjects to see attendance analytics.</EmptyState>;
+  const totalsBySubject = new Map(data.attendanceTotals.map((total) => [total.subjectId, total]));
   return (
     <div className="space-y-4">
       {data.subjects.map((subject) => {
-        const value = attendancePercentage(subject, data.attendanceRecords);
+        const value = attendancePercentage(totalsBySubject.get(subject.id));
         return (
           <div key={subject.id}>
             <div className="mb-2 flex justify-between gap-3 text-sm">
@@ -460,8 +468,8 @@ function SettingsView({ data }: { data: AppData }) {
         <div className="space-y-3 text-sm leading-6 text-stone-600">
           <p>Use Google web OAuth credentials with the Classroom API enabled.</p>
           <p>
-            Required env vars live in <code>web/.env.local</code>: <code>GOOGLE_CLIENT_ID</code>,{" "}
-            <code>GOOGLE_CLIENT_SECRET</code>, <code>AUTH_SECRET</code>, and <code>DATABASE_URL</code>.
+            Required env vars live in <code>web/.env.local</code>: <code>AUTH_GOOGLE_ID</code>,{" "}
+            <code>AUTH_GOOGLE_SECRET</code>, <code>AUTH_SECRET</code>, and <code>DATABASE_URL</code>.
           </p>
         </div>
       </Panel>

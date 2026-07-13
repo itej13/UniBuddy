@@ -10,6 +10,7 @@ export const classroomScopes = [
   "profile",
   "https://www.googleapis.com/auth/classroom.courses.readonly",
   "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
+  "https://www.googleapis.com/auth/classroom.student-submissions.me.readonly",
 ].join(" ");
 
 // Google's OIDC discovery doc advertises authorization_response_iss_parameter_supported: true

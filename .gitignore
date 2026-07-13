@@ -5,3 +5,8 @@ dist/
 DerivedData/
 *.swp
 .env.local
+.vercel
+.claude/
+.understand-anything/
+graphify-out/
+a.md

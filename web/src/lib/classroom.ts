@@ -27,6 +27,26 @@ type SubmissionsResponse = {
   }>;
 };
 
+type TokenResponse = {
+  access_token?: string;
+  expires_in?: number;
+  refresh_token?: string;
+  scope?: string;
+  token_type?: string;
+  error?: string;
+  error_description?: string;
+};
+
+export class ClassroomRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ClassroomRequestError";
+  }
+}
+
 async function classroomRequest<T>(
   accessToken: string,
   path: string,
@@ -44,10 +64,48 @@ async function classroomRequest<T>(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Google Classroom request failed (${response.status}): ${body}`);
+    throw new ClassroomRequestError(
+      response.status,
+      `Google Classroom request failed (${response.status}): ${body}`,
+    );
   }
 
   return (await response.json()) as T;
+}
+
+export async function refreshGoogleAccessToken(refreshToken: string) {
+  const clientId = process.env.AUTH_GOOGLE_ID;
+  const clientSecret = process.env.AUTH_GOOGLE_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error("Google OAuth credentials are not configured on the server.");
+  }
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+    cache: "no-store",
+  });
+  const result = (await response.json()) as TokenResponse;
+
+  if (!response.ok || !result.access_token) {
+    throw new Error(
+      `Google could not refresh the Classroom connection: ${result.error_description ?? result.error ?? response.statusText}`,
+    );
+  }
+
+  return {
+    accessToken: result.access_token,
+    expiresAt: Math.floor(Date.now() / 1000) + (result.expires_in ?? 3600),
+    refreshToken: result.refresh_token,
+    scope: result.scope,
+    tokenType: result.token_type,
+  };
 }
 
 async function pagedRequest<TItems, TResponse extends PageResponse<Record<string, unknown>>>(

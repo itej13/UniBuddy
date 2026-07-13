@@ -5,13 +5,14 @@
 **The all-in-one academic companion for college students.**  
 Track attendance, monitor submissions, and sync your Google Classroom — all in one place.
 
-[![Next.js](https://img.shields.io/badge/Next.js_16-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js_15-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com)
 [![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![CI](https://github.com/itej13/UniBuddy/actions/workflows/ci.yml/badge.svg)](https://github.com/itej13/UniBuddy/actions/workflows/ci.yml)
 
-[**Live Demo →**](https://unibuddy-five.vercel.app)
+[**Live Demo →**](https://uni-buddy-kappa.vercel.app)
 
 </div>
 
@@ -36,7 +37,7 @@ UniBuddy pulls your courses and assignments straight from Google Classroom and g
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 16 — App Router, React Server Components, Server Actions |
+| Framework | Next.js 15 — App Router, React Server Components, Server Actions |
 | Language | TypeScript 5 |
 | Auth | NextAuth v5 — Google OAuth, database-backed sessions |
 | Database | PostgreSQL via Supabase, managed with Prisma ORM |
@@ -51,7 +52,7 @@ UniBuddy pulls your courses and assignments straight from Google Classroom and g
 ```
 Browser
   │
-  ├─► proxy.ts          Lightweight session-cookie check (Next.js 16 Proxy)
+  ├─► middleware.ts     Lightweight session-cookie check before protected routes
   │
   ├─► /app/*            React Server Components — fetch data server-side
   │     └─► lib/data.ts        userId-scoped Prisma queries
@@ -170,7 +171,7 @@ UniBuddy/
     │   │   ├── domain.ts       Business logic utilities
     │   │   └── prisma.ts       Prisma client singleton
     │   ├── auth.ts             NextAuth v5 configuration
-    │   └── proxy.ts            Route-level auth proxy (Next.js 16)
+    │   └── middleware.ts        Route-level auth middleware
     ├── .env.example            Environment variable template
     └── next.config.ts          Security headers + Next.js config
 ```
@@ -186,6 +187,17 @@ npm run db:push         # Push schema changes without migration files
 npm run db:studio       # Open Prisma Studio (visual DB browser)
 ```
 
+## Quality Checks
+
+GitHub Actions runs the same checks used before release on every push and pull request:
+
+```bash
+cd web
+npm ci
+npm run lint
+npm run build
+```
+
 ---
 
 ## Security
@@ -195,8 +207,8 @@ Student data privacy is a first-class concern. Here's how it's enforced:
 - **Database-backed sessions** — session tokens are opaque references stored in PostgreSQL; no user data is embedded in cookies or JWTs
 - **Server-side token storage** — Google OAuth access and refresh tokens never leave the server or appear in client-side state
 - **Row-level data isolation** — every Prisma query includes `where: { userId }`, making cross-user data access impossible at the application layer
-- **Route protection** — `proxy.ts` checks for a valid session cookie on every request before it reaches any page; `requireUserId()` in Server Actions enforces auth a second time
-- **Read-only Classroom scopes** — the app only requests `classroom.courses.readonly` and `classroom.coursework.me.readonly`; it cannot modify any Classroom data
+- **Route protection** — `middleware.ts` checks for a valid session cookie on every protected request; `requireUserId()` in Server Actions enforces auth a second time
+- **Read-only Classroom scopes** — the app requests `classroom.courses.readonly`, `classroom.coursework.me.readonly`, and `classroom.student-submissions.me.readonly`; it cannot modify any Classroom data
 - **HTTP security headers** — Content-Security-Policy, HSTS (2-year max-age), X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy, Permissions-Policy
 
 ---

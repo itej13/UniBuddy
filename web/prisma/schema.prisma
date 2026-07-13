@@ -44,6 +44,7 @@ model Account {
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId, provider])
 }
 
 model Session {
@@ -77,6 +78,8 @@ model Subject {
   assignments         Assignment[]
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
+
+  @@index([userId, name])
 }
 
 model TimetableSlot {
@@ -91,6 +94,8 @@ model TimetableSlot {
   subject      Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([userId, weekday, startMinutes])
 }
 
 model AttendanceRecord {
@@ -106,6 +111,7 @@ model AttendanceRecord {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, subjectId, date])
+  @@index([userId, date])
 }
 
 model ClassroomCourse {
@@ -118,6 +124,7 @@ model ClassroomCourse {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, classroomId])
+  @@index([userId, name])
 }
 
 model Assignment {
@@ -139,4 +146,5 @@ model Assignment {
   subject         Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
 
   @@unique([userId, classroomKey])
+  @@index([userId, dueDate])
 }
